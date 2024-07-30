@@ -76,8 +76,9 @@ int main(int argc, char *argv[])
 
 
     cout << "(CLIENT)Connecxion au serveur REUSSI" << endl;
+    string TitreFenetre="Pong Client "+to_string(forLag);
     
-    RenderWindow window(VideoMode(windowWidth, windowHeight), "Pong Client");
+    RenderWindow window(VideoMode(windowWidth, windowHeight), TitreFenetre.c_str());
 
     // create a ball
     Ball ball(windowWidth / 2, windowHeight / 2);
@@ -377,13 +378,13 @@ void *FctThreadReceive(void *setting)
     while (1)
     {
         char Data[1024];
-        // Reçoit les données de manière non bloquante et stocke les données dans Data. Le timeout est fixé à 200 millisecondes
-        int status = client->receiveNonBlocking(Data, 200);
+        // Reçoit les données de manière non bloquante et stocke les données dans Data. Le timeout est fixé à 120 millisecondes
+        int status = client->receiveNonBlocking(Data, 120);
 
         struct timespec wait;
-        // Conversion des millisecondes en secondes et nanosecondes
-        wait.tv_sec = forLag / 1000;
-        wait.tv_nsec = (forLag % 1000) * 1000000;
+        // Conversion des millisecondes en nanosecondes
+        wait.tv_sec = 0;
+        wait.tv_nsec = (long)(forLag *1000000);
         nanosleep(&wait, NULL);// Utilisation de nanosleep pour attendre cette durée.
 
         if (status == TIMEOUT)

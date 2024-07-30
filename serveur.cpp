@@ -4,8 +4,7 @@
 #include <pthread.h>
 #include <queue>
 #include <SFML/Graphics.hpp>
-#include <time.h>
-#include <sys/time.h>
+#include <chrono>
 
 #include "GameServer.h"
 #include "bat.h"
@@ -112,8 +111,8 @@ int main()
         y_sepa+=64;
     }
     
-    const int tickRate = 64; // Taux de rafraîchissement en Hz
-    const int tickDuration = 1000000 / tickRate; // Durée d'une boucle en microsecondes
+    const int tickRate = 32; // Taux de rafraîchissement en Hz
+    const double tickPeriod_sec = 1.0 / (double)tickRate; // Durée d'une boucle en seconde (0.03125s pour 32Hz)
 
     int scoreC1 = 0;
     int scoreC2 = 0;
@@ -129,14 +128,12 @@ int main()
     //démarrage de la balle
     ball.start();
     bool start = true;
-    
-    sf::Clock clock;
+
 
 //Boucle principale du jeu
     while (start==true)
-    {
-        sf::Time elapsed = clock.restart(); // Restart the clock and return the elapsed time
-        long elapsedTime = elapsed.asMicroseconds();// Convert the time to microseconds
+    {   
+        auto start = std::chrono::high_resolution_clock::now();//Démarre le chrono(capture le temps de début de la boucle)
 
         //On analyse les event des clients si il bouge la raquette ou pas
         status = EventClient(batC1, batC2);
@@ -153,6 +150,8 @@ int main()
 
         // Gestion de la balle (collision, rebonds, etc.)
         HandleBall(ball, batC1, batC2, scoreC1, scoreC2);
+        
+        //envoie l'etat du jeu aux clients
 
         //On envoi les infos au client 1
         status= SendDataToClient(client1, ball, batC1, batC2, scoreC1, scoreC2, true);
@@ -170,15 +169,25 @@ int main()
             pthread_cancel(threadRecv); pthread_join(threadRecv, NULL);
             return status;
         }
+        auto end = std::chrono::high_resolution_clock::now();//Capture le temps de fin de la boucle
 
-        // Contrôle du temps pour maintenir le taux de rafraîchissement
-        long sleepDuration = tickDuration - elapsedTime;
+        //Calcul le temps écoulé entre le début et la fin de la boucle
+        std::chrono::duration<double, std::milli> TimeInterval_ms = end - start;
 
-        if (sleepDuration > 0) 
+        //Si le temps écoulé est inférieur à la période de rafraîchissement, on attend le temps restant        
+        if (TimeInterval_ms.count() < (tickPeriod_sec * 1000) )
         {
-            sf::sleep(sf::microseconds(sleepDuration));// met le prog en pause pour la duree restante pour atteindre le taux de rafraichissement
+            struct timespec wait;
+            wait.tv_sec = 0;
+            wait.tv_nsec =(long)( (tickPeriod_sec * 1000000000) - (TimeInterval_ms.count() * 1000000) );
+            nanosleep(&wait, NULL);
+            cout <<endl<< "! (SERVEUR) Rafraichissement maintenu !" << endl;
         }
-
+        else
+        {
+            cout <<endl<< "!!! (SERVEUR)ERREUR de rafraichissement(un des client a LAG) !!!" << endl;
+        }
+        
     }
     pthread_cancel(threadRecv);
     pthread_join(threadRecv, NULL);
@@ -310,7 +319,7 @@ int EventClient(Bat &batC1, Bat &batC2)
         {
             if (batC1.getPosition().top > 0)
                 batC1.moveUp();
-            
+
         }
         //Si le client clique fleche du bas
         else if (Data == "Down")
@@ -475,12 +484,12 @@ void *FctThreadReceive(void *setting)
 
         // Reception du client 1
         // Reçoit les données de manière non bloquante et stocke les données dans Data. Le timeout est fixé à 200 millisecondes
-        status = client1->receiveNonBlocking(Data, 200);
+        status = client1->receiveNonBlocking(Data, 80);
         handleThreadReceiveStatus(status, Data, true);
 
         // Reception du client 2
         // Reçoit les données de manière non bloquante et stocke les données dans Data. Le timeout est fixé à 200 millisecondes
-        status = client2->receiveNonBlocking(Data, 200);
+        status = client2->receiveNonBlocking(Data, 80);
         handleThreadReceiveStatus(status, Data, false);
     }
     pthread_exit(NULL);
